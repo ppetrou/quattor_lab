@@ -1,0 +1,109 @@
+---
+# tasks file for quattor-setup
+
+- name: Configure EPEL Release Repository
+  ansible.builtin.package:
+    name: epel-release
+    state: latest
+
+- name: Configure Quattor Repositories
+  ansible.builtin.yum_repository:
+    name: "{{ quattor_repo.name }}"
+    description: "{{ quattor_repo.description }}"
+    baseurl: "{{ quattor_repo.baseurl }}"
+    enabled: "{{ quattor_repo.enabled }}"
+    gpgcheck: "{{ quattor_repo.gpgcheck }}"
+    gpgkey: "{{ quattor_repo.gpgkey }}"
+  loop: "{{ quattor_repos }}"
+  loop_control:
+    loop_var: quattor_repo
+    label: "{{ quattor_repo.name }}}"
+
+- name: Download Quattor Repo GPG Key
+  get_url:
+    url: "{{ quattor_gpg_key_url }}"
+    dest: /etc/pki/rpm-gpg/
+    mode: '0644'
+
+- name: Import Quattor Repo GPG Key
+  ansible.builtin.rpm_key:
+    state: present
+    key: "{{ quattor_gpg_key_filepath }}"
+
+- name: Install Quattor
+  ansible.builtin.package:
+    name: "{{ quattor_pkg }}"
+    state: latest
+  loop: "{{ quattor_rpms }}"
+  loop_control:
+    loop_var: quattor_pkg
+    label: "{{ quattor_pkg }}"
+
+- name: Install Web Server
+  ansible.builtin.package:
+    name: "{{ webserver_rpm }}"
+    state: latest
+
+- name: Install Kerberos
+  ansible.builtin.package:
+    name: "{{ kerberos_server_rpm }}"
+    state: latest
+
+- name: Install Database
+  ansible.builtin.package:
+    name: "{{ db_pkg }}"
+    state: latest
+  loop: "{{ database_rpms }}"
+  loop_control:
+    loop_var: db_pkg
+    label: "{{ db_pkg }}"
+
+- name: Install Virtual Env Dependencies
+  ansible.builtin.package:
+    name: "{{ venv_dep_pkg }}"
+    state: latest
+  loop: "{{ virtual_env_dep_rpms }}"
+  loop_control:
+    loop_var: venv_dep_pkg
+    label: "{{ venv_dep_pkg }}"
+
+- name: Create Quattor Root Directory
+  file:
+    path: "{{ quattor_root_dir }}"
+    state: directory
+
+- name: Create Aquilon Virtual Env 
+  become: yes
+  shell:
+    cmd: virtualenv --prompt="(aquilon) " {{ aquilon_venv_path }} && . {{ aquilon_venv_path }}/bin/activate && pip install --upgrade pip && pip install --upgrade setuptools
+    creates: "{{ aquilon_venv_path }}"
+
+- name: Install Python Module for Aquilon using PIP
+  pip:
+    name: "{{ aq_pip_module }}"
+    virtualenv: "{{ aquilon_venv_path }}"
+  loop: "{{ aquilon_pip_modules }}"
+  loop_control:
+    loop_var: aq_pip_module
+    label: "{{ aq_pip_module }}"
+
+- name: Clone Aquilon Protocols
+  ansible.builtin.git:
+    repo: "{{ aquilon_protocols_git_repo }}"
+    dest: "{{ aquilon_protocols_checkout_dir }}"
+
+- name: Build Aquilon Protocols
+  shell: . {{ aquilon_venv_path }}/bin/activate && cd {{ aquilon_protocols_checkout_dir }} && ./setup.py install
+
+- name: Install Aquilon
+  ansible.builtin.git:
+    repo: "{{ aquilon_git_repo }}"
+    dest: "{{ aquilon_install_dir }}"
+
+- name: Broker Configuration
+  debug:
+    msg: "Broker Configuration - NOT IMPLEMENTED!"
+
+
+    
+

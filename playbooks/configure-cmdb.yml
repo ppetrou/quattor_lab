@@ -1,0 +1,9 @@
+---
+- name: Configure CMDB
+  hosts: aquillon-cmdb-lab
+
+  tasks:
+
+    - name: Configure CMDB
+      import_role:
+        name: quattor-setup
