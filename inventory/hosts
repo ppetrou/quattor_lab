@@ -1,2 +1,2 @@
-aquillon-cmdb-lab ansible_host=192.168.122.254
-aquillon-aii-lab ansible_host=192.168.122.28
+aquillon-cmdb-lab ansible_host=192.168.122.143
+aquillon-aii-lab ansible_host=192.168.122.24

@@ -1,0 +1,429 @@
+# ex: set expandtab softtabstop=4 shiftwidth=4: -*- cpy-indent-level: 4; indent-tabs-mode: nil -*-
+#
+# Copyright (C) 2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018  Contributor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Generally, the server will point at /etc/aqd.conf (see
+# etc/aqd.conf.example for an example of a prod config file) or a
+# developer will use etc/aqd.conf.dev or a copy.  This file is always
+# read first when determining configuration, and supplies all defaults.
+# This behavior has been hard-coded into the config.py methods.
+#
+# If a value is missing from here *and* not supplied later, the broker
+# might fail.  The purpose of this file is to make sure that all values
+# that might be read have some valid default.
+#
+# A value should *not* be removed from this file without confirming
+# that the source code does not reference it.
+#
+# Best practice is to only override as necessary.
+
+[DEFAULT]
+basedir = /opt/aquilon
+# The broker does not rely on 'user' for anything security-related...
+# user = # config.py supplies os.environ.get("USER") as a default
+# srcdir = # config.py supplies a custom _get_srcdir() as a default
+# hostname = # config.py supplies socket.gethostname() as a default
+quattordir = /var/quattor
+
+[database_oracle]
+server = LNTO_AQUILON_NY
+# Set the username to empty to use Kerberos
+#dbuser = %(user)s
+dbuser =
+#password_file =
+# Default schema, if different from what's configured at the DB level
+#default_schema = %(user)s
+# Schema the xtn_log tables exist in, if separate from the rest of the tables.
+# There is no default - the value is only used if set.
+#audit_schema = %(user)s
+dsn = oracle://%(dbuser)s:PASSWORD@%(server)s
+module = orcl/client/11.2.0.1.0
+
+# There are two pools - one for commands that use locks and one for
+# commands that don't.  These values apply to each pool.
+#
+# The pool size needs to take into account both the number of
+# active connections the database can handle and the number of
+# active commands the broker can handle in memory.  While the broker
+# is running as 32-bit we're deliberately leaving the pool size low.
+# With the pool size so low having overflow connections is useless.
+# They would be continually active and just increasing load by opening
+# and closing connections.
+#
+# Having timeout defined but unset allows for incoming connections to wait as
+# long as needed for a database connection from the pool.
+pool_size = 3
+pool_max_overflow = 0
+pool_timeout =
+#pool_recycle =
+
+[database_sqlite]
+dbfile = %(quattordir)s/aquilondb/aquilon.db
+dsn = sqlite:///%(dbfile)s
+# SQLite does not use connection pooling, so the pool_* options won't work
+# here.
+
+[database_postgresql]
+# Leave the server name empty for unix socket on localhost
+server = 
+dbuser = %(user)s
+dbname = aquilon
+#password_file =
+dsn = postgresql+psycopg2://%(dbuser)s:PASSWORD@%(server)s/%(dbname)s
+# Default schema to use
+#default_schema = %(user)s
+# Schema the xtn_log tables exist in, if separate from the rest of the tables.
+# There is no default - the value is only used if set.
+#audit_schema = %(user)s
+
+# There are two pools - one for commands that use locks and one for
+# commands that don't.  These values apply to each pool.
+#
+# The pool size needs to take into account both the number of
+# active connections the database can handle and the number of
+# active commands the broker can handle in memory.  While the broker
+# is running as 32-bit we're deliberately leaving the pool size low.
+# With the pool size so low having overflow connections is useless.
+# They would be continually active and just increasing load by opening
+# and closing connections.
+#
+# Having timeout defined but unset allows for incoming connections to wait as
+# long as needed for a database connection from the pool.
+pool_size = 3
+pool_max_overflow = 0
+pool_timeout =
+#pool_recycle =
+
+[database]
+database_section = database_postgresql
+
+# Log query execution times. You probably also want to enable the logging of
+# the queries too, by adjusting the level of sqlalchemy.engine in the [logging]
+# section.
+#log_query_times = yes
+
+# Log query execution plans, if the backend supports it. This can be quite heavy.
+#log_query_plans = yes
+
+# Only log the query plan for the first time a query is seen
+#log_unique_plans_only = yes
+
+[broker]
+default_organization = ms
+default_user_type = human
+servername = %(hostname)s
+umask = 0022
+kncport = 6900
+openport = 6901
+# Force binding to a specific IP address/host name. Only a single address is supported
+#bind_address =
+# Using a fix port for sending out notifications makes it easier to configure firewalls
+#cdp_send_port =
+git_port = 9418
+gzip_level = 9
+git_templates_url = git://%(servername)s:%(git_port)s%(kingdir)s
+git_daemon_basedir = %(basedir)s
+run_git_daemon = True
+cfgdir = %(quattordir)s/cfg
+kingdir = %(quattordir)s/template-king
+templatesdir = %(quattordir)s/templates
+domainsdir = %(quattordir)s/domains
+rundir = %(quattordir)s/run
+sockdir = %(rundir)s/sockets
+logdir = %(quattordir)s/logs
+logfile = %(logdir)s/aqd.log
+aq_notifyd_logfile = %(logdir)s/aq_notifyd.log
+cmlogfile = %(logdir)s/aqd_cm.log
+profilesdir = %(quattordir)s/web/htdocs/profiles
+plenarydir = %(cfgdir)s/plenary
+#git_author_name =
+#git_author_email =
+#git_committer_name =
+#git_committer_email =
+#ant_options = -Xmx2560m -server
+service = %(user)s
+keytab = /var/spool/keytabs/%(service)s
+installfe_user = %(user)s
+# Define installfe_cdburl to the URL used to serve broker profiles
+# if you want Aquilon to manage AII cdburl
+installfe_cdburl =
+server_notifications =
+client_notifications = yes
+sharedata = /ms/dist/storage/etc/nasobjects.cdb
+default_domain_start = prod
+trash_branch = trash
+
+# Path to aqd logging configuration
+aqd_logging_conf = aqd.logging.conf
+# Path to aq_notifyd logging configuration
+aq_notifyd_logging_conf = aq_notifyd.logging.conf
+
+authorization_rules = aqd-authorization.conf
+authorization_error = Please contact an administrator for access.
+# See comments in aquilon.worker.resources.set_thread_pool_size
+twisted_thread_pool_size = 100
+# The knc daemon can be run by the broker for development purposes.
+# Will default to True until we migrate to a new configuration in prod.
+run_knc = True
+# Default and maximum numbers of audit (xtn table) rows returned by search audit
+default_audit_rows = 5000
+max_audit_rows = 20000
+# When running aq poll switch, these control how to use and contact
+# jump servers.  This functionality might make more sense integrated
+# with aii-shellfe.
+poll_helper_service = poll_helper
+poll_ssh_options = -o StrictHostKeyChecking=no -o BatchMode=yes
+grn_to_eonid_map_location = /ms/dist/appmw/PROJ/eon-data/prod/common
+run_aqnotifyd = True
+user_list_location = /ms/dist/aurora/PROJ/dsdbfiles/incr/passwd.byname
+
+# Limit of hostlists
+default_max_list_size = 1000
+reconfigure_max_list_size =
+pxeswitch_max_list_size =
+manage_max_list_size =
+reset_advertised_status_max_list_size =
+map_grn_max_list_size =
+unmap_grn_max_list_size =
+
+user_delete_limit = 1000
+
+default_network_type = unknown
+
+auto_mac_start = 00:50:56:01:20:00
+auto_mac_end = 00:50:56:3f:ff:ff
+
+disk_controller_types = cciss, fibrechannel, flash, ide, nvme, sas, sata, scsi
+disk_technology_types = hdd, ssd, nvme
+disk_usage_types = os, data, swap, cache, capacity
+
+dynamic_range_classes = vm, fab
+default_dynamic_range_class = vm
+
+[dsdb]
+enable = False
+dsdb_use_testdb = False
+manager_grn = grn:/ms/ei/aquilon/aqd
+
+[change_management]
+# The contents of --justification will not be validated externally
+# (syntax checking will still be performed)
+enable = False
+
+[tool_locations]
+dsdb = /ms/dist/aurora/PROJ/dsdb/6.x-prod/bin/dsdb
+ssh = /ms/dist/sec/PROJ/openssh/prod/bin/ssh
+switch_discover = /ms/dist/aquilon/PROJ/switch-discover/prod/bin/switch-discover
+get_camtable = /ms/dist/aquilon/PROJ/switch-discover/prod/bin/get-camtable
+git = /bin/git
+git_daemon = /usr/libexec/git-core/git-daemon 
+aii_installfe = /usr/sbin/aii-installfe 
+vlan2net = /ms/dist/aquilon/PROJ/vlan2net/prod/bin/vlan2net
+mean = /var/quattor/scripts/sandbox_owner.sh
+qip_dump_subnetdata = /ms/dist/dhcp/PROJ/qipwrap/prod/bin/qip-dump-subnetdata
+knc = /usr/bin/knc
+krb5_keytab = /ms/dist/kerberos/PROJ/krb5_keytab/prod/sbin/krb5_keytab
+klist = /bin/klist
+aqd_checkedm = /ms/dist/aquilon/PROJ/edmtools/prod/bin/aqd_checkedm
+gerrit_trigger = /ms/dist/aquilon/PROJ/templates-ci/prod/bin/gerrit_trigger
+gerrit_push_branch = /ms/dist/aquilon/PROJ/templates-ci/prod/bin/gerrit_push_branch
+refresh_user_list = /ms/dist/aquilon/PROJ/aqd-scripts/prod/bin/refresh_user_list
+
+java_home = /usr
+ant_home = /usr/share/ant/
+ant_contrib_jar = /usr/share/java/ant/ant-contrib.jar
+ant = %(ant_home)s/bin/ant
+
+location_uri_validator = /ms/dist/aquilon/PROJ/aqd-scripts/prod/bin/location_uri_validator
+
+[location_feeds]
+building_feed = /v/campus/ny/appl/aquilon/aqd/data/qa/manhattan_ingress_qa/Building_IT_code.csv
+
+[hardware_chassis]
+default_eonid = 47599
+
+[hardware_network_device]
+default_archetype = netinfra
+
+[archetype_aquilon]
+default_personality = inventory
+default_osname = linux
+default_grn_target = esp
+host_grn_targets = esp
+personality_grn_targets = esp,invited
+
+[archetype_aurora]
+default_personality = generic
+default_domain = ny-prod
+default_osname = linux
+default_osversion = generic
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_esx_cluster]
+allow_cascaded_deco = True
+max_members_default = 8
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_gridcluster]
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_hacluster]
+allow_cascaded_deco = True
+max_members_default = 2
+max_priority_order = 99
+min_priority_order = 1
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_metacluster]
+default_domain = ny-prod
+default_personality = metacluster
+max_members_default = 32
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_netinfra]
+default_domain = netinfra
+default_personality = generic
+default_osname = generic
+default_osversion = generic
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_storagecluster]
+max_members_default = 2
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_vmhost]
+default_grn_target = esp
+host_grn_targets = esp
+personality_grn_targets = esp
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[archetype_windows]
+default_domain = ny-prod
+default_personality = generic
+default_osname = windows
+default_osversion = generic
+del_host_buildstatus_allow_only = almostready, ready, rebuild, reinstall, blind, build, decommissioned, failed, install
+
+[network_unknown]
+# Default offset of the gateway's IP address, if there are no explicit router
+# addresses registered in the database. Usual values are 1 for the first IP
+# address of the network, or -2 for the last IP address (-1 would be the
+# broadcast address)
+default_gateway_offset = 1
+
+# Index of the first usable IP address available for auto allocation. IPs
+# before this index can still be assigned manually. This value will be ignored
+# if the network is smaller than the index here (e.g. /31 or /32 networks)
+first_usable_offset = 5
+
+# Comma-separated list of indexes of IP addresses which should never be
+# allocated. Negative indexes count from the end of the network
+reserved_offsets = 0,-1
+
+# True if the network may span multiple buildings
+may_span_buildings = False
+
+[network_tor_net]
+first_usable_offset = 8
+reserved_offsets = 0,6,7,-1
+
+[network_tor_net2]
+first_usable_offset = 9
+reserved_offsets = 0,7,8,-1
+
+[network_tor_net4]
+first_usable_offset = 16
+
+[network_vm_storage_net]
+first_usable_offset = 9
+
+[network_vip]
+may_span_buildings = True
+
+[panc]
+default_version = prod
+version = %(default_version)s
+# The update_domain command expects to be able to read this value
+# in raw mode and set the version variable itself.
+pan_compiler = /usr/lib/panc.jar
+# Number of templates to cache in memory during compiles
+batch_size = 1000
+# Option passed to panc the output format that it uses
+xml_profiles = true
+json_profiles = false
+gzip_output = false
+# Assume the webserver will decompress transparently as needed.
+# only used if gzip_output = true
+transparent_gzip = true
+template_extension = .tpl
+object_declarations_template = false
+# For publish review target branch
+default_target_branch = prod
+
+[tool_timeout]
+# If set to True, timeout will be set to 'default_value' for any tools run via subprocess
+default_enabled = True
+
+# Should be always specified
+default_value = 1800
+
+# Override timeout for specific tools: values in seconds, 0 - no timeout
+# If toolname is not specified or empty timeout value given, use default_value (if default_enabled)
+ant =
+mean = 300
+get_camtable = 300
+aii_installfe = 600
+vlan2net = 600
+qip_dump_subnetdata = 600
+aqd_checkedm = 120
+location_uri_validator = 30
+switch_discover = 30
+dsdb = 120
+git = 0
+
+[site]
+# Site specific settings
+default_hardware_label_regex = ^[a-z][a-z0-9]{,62}$
+dsdb_name_regex = ^(?P<loc>[^ ]*[^0-9])(?P<id>[1-9][0-9]*)$
+default_dns_environment = internal
+default_network_environment = internal
+# Space-separated list of user roles that can add and delete internal networks
+change_default_netenv_roles = aqd_admin
+# Allow Aquilon broker generate nextip for vip/localvip type
+# Temporary option until we can vary API by Aquilon broker instance
+ipfromtype = False
+
+# Interface types that require specific names should be added as key for this
+# configuration section. If an interface type is not specified here,
+# any interface name format will be allowed
+[interface_name_regex]
+# Interface model name field validation regex
+public = ^[a-z]+\d+[a-z]?$
+management = ^[a-z]+\d*$
+vlan = ^[a-z]+\d*\.[1-9]\d*$
+# Linux: ncm-networks wants "bond.*", but Netapp is more relaxed
+bonding = ^[a-z]+\d+$
+
+[network_refresh]
+# Set precreated_compartments_only = True to only sync networks with compartments
+# already existing in Aquilon database.
+# Previously created networks with empty compartments will be deleted.
+precreated_compartments_only = False
+# Set ignore_network_compartments = ^pattern\.* to ignore networks matching the value.
+# Leave empty to sync all compartments.
+ignore_network_compartments_regex =
+
+[protocols]
+directory = /var/quattor/aquilon-venv/lib/python2.7/site-packages 

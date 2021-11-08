@@ -1,6 +1,12 @@
 ---
 # tasks file for quattor-setup
 
+- name: Update /etc/hosts
+  ansible.builtin.lineinfile:
+    path: "/etc/hosts"
+    line: "{{ ansible_host }}\t{{ ansible_fqdn }}"
+    state: present
+
 - name: Configure EPEL Release Repository
   ansible.builtin.package:
     name: epel-release
@@ -20,7 +26,7 @@
     label: "{{ quattor_repo.name }}}"
 
 - name: Download Quattor Repo GPG Key
-  get_url:
+  ansible.builtin.get_url:
     url: "{{ quattor_gpg_key_url }}"
     dest: /etc/pki/rpm-gpg/
     mode: '0644'
@@ -68,18 +74,18 @@
     label: "{{ venv_dep_pkg }}"
 
 - name: Create Quattor Root Directory
-  file:
+  ansible.builtin.file:
     path: "{{ quattor_root_dir }}"
     state: directory
 
 - name: Create Aquilon Virtual Env 
   become: yes
-  shell:
+  ansible.builtin.shell:
     cmd: virtualenv --prompt="(aquilon) " {{ aquilon_venv_path }} && . {{ aquilon_venv_path }}/bin/activate && pip install --upgrade pip && pip install --upgrade setuptools
     creates: "{{ aquilon_venv_path }}"
 
-- name: Install Python Module for Aquilon using PIP
-  pip:
+- name: Install Python Modules for Aquilon using PIP
+  ansible.builtin.pip:
     name: "{{ aq_pip_module }}"
     virtualenv: "{{ aquilon_venv_path }}"
   loop: "{{ aquilon_pip_modules }}"
@@ -91,19 +97,131 @@
   ansible.builtin.git:
     repo: "{{ aquilon_protocols_git_repo }}"
     dest: "{{ aquilon_protocols_checkout_dir }}"
+  register: r_clone_aquillon_prot
 
 - name: Build Aquilon Protocols
-  shell: . {{ aquilon_venv_path }}/bin/activate && cd {{ aquilon_protocols_checkout_dir }} && ./setup.py install
+  ansible.builtin.shell:
+    cmd: . {{ aquilon_venv_path }}/bin/activate && cd {{ aquilon_protocols_checkout_dir }} && ./setup.py install
+  when:
+    - r_clone_aquillon_prot.changed == True
 
 - name: Install Aquilon
   ansible.builtin.git:
     repo: "{{ aquilon_git_repo }}"
     dest: "{{ aquilon_install_dir }}"
 
-- name: Broker Configuration
-  debug:
-    msg: "Broker Configuration - NOT IMPLEMENTED!"
+# TODO. Create the aquillon directory structure in /var/quattor or equivalent
+
+- name: Render aqd.conf
+  vars:
+    t_default_organization : "{{ default_org }}"
+  ansible.builtin.template:
+    src: aqd.conf.j2
+    dest: /etc/aqd.conf
+
+- name: Render krb5.conf
+  ansible.builtin.template:
+    src: krb5.conf.j2
+    dest: /etc/krb5.conf
+
+- name: Initialize and create the Kerberos database
+  ansible.builtin.command:
+    cmd: kdb5_util create -s -P {{ kerberos_database_master_password }}
+    creates: "{{ kerberos_database_filepath }}"
+
+- name: Grant administrative access to admin accounts
+  ansible.builtin.lineinfile:
+    path: "{{ kerberos_acl_filepath }}"
+    line: "{{ kerberos_admin_acl_entry }}"
+    state: present
+
+- name: Get kerberos admin account
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc admin/admin"
+  register: r_get_krb_admin_princ
+
+- name: Create kerberos admin principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ kerberos_admin_account_password }} admin/admin"
+  when: "'does not exist' in r_get_krb_admin_princ.stderr"
+
+- name: Enable and Start Kerberos Services
+  ansible.builtin.systemd:
+    name: "{{ krb_service }}"
+    state: started
+    enabled: yes
+  loop: "{{ kerberos_services }}"
+  loop_control:
+    loop_var: krb_service
+    label: "{{ krb_service }}"
+
+- name: Create Broker User
+  ansible.builtin.user:
+    name: "{{ broker_user }}"
+    state: present
+
+- name: Create keytabs directory
+  ansible.builtin.file:
+    path: "{{ kerberos_keytabs_dir }}"
+    state: directory
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
+- name: Get kerberos broker principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc {{ broker_user }}"
+  register: r_aquilon_broker_princ
+
+- name: Create kerberos broker principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ broker_principal_password }} {{ broker_user }}"
+  when: "'does not exist' in r_aquilon_broker_princ.stderr"
+
+- name: Get kerberos broker/host.fqdn principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc {{ broker_user_fqdn }}"
+  register: r_aquilon_brokerfqdn_princ
+
+- name: Create kerberos broker/fqdn principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ broker_user_fqdn_password }} {{ broker_user_fqdn }}"
+  when: "'does not exist' in r_aquilon_brokerfqdn_princ.stderr"
+
+# TODO kinit fails to authenticate when we setup keytab. Something is not right... check with the documentation
+
+# - name: Create a keytab that will be readable by the broker account.
+#   ansible.builtin.command:
+#     cmd: kadmin.local -q "ktadd -k {{ kerberos_broker_keytab_filepath }} {{ broker_user }} {{ broker_user_fqdn }}"
+
+# - name: Fix permissions to the keytab
+#   ansible.builtin.file:
+#     path: "{{ kerberos_broker_keytab_filepath }}"
+#     state: file
+#     owner: "{{ broker_user }}"
+#     group: "{{ broker_user }}"
+
+- name: Create aquilon directories
+  ansible.builtin.file:
+    path: "{{ aquilon_dir }}"
+    state: directory
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+  loop: "{{ aquilon_directories }}"
+  loop_control:
+    loop_var: aquilon_dir
+    label: "{{ aquilon_dir }}"
+
+- name: Fix permissions in quattor root directory
+  ansible.builtin.file:
+    path: "{{ quattor_root_dir }}"
+    state: directory
+    recurse: yes
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
+
+
+
 
 
     
-
