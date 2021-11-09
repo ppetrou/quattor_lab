@@ -23,11 +23,7 @@ user_list_location =
 ###############################################################################
 
 [database]
-#database_section = database_postgresql
 database_section = database_sqlite
-
-[database_postgresql]
-dbname = aquilon
 
 [database_sqlite]
 dbfile = %(quattordir)s/aquilondb/aquilon.db
@@ -134,4 +130,4 @@ bonding = ^[a-z]+\d+$
 ###############################################################################
 
 [protocols]
-directory = /usr/local/lib/aquilon/protocols/lib/python
+directory = {{ t_aquilon_venv_path }}/lib/python2.7/site-packages

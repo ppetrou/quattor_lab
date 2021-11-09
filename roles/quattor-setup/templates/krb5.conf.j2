@@ -24,6 +24,6 @@ includedir /etc/krb5.conf.d/
  }
 
 [domain_realm]
- .{{ ansible_domain|upper }} = {{ ansible_domain|upper }}
- {{ ansible_domain|upper }} = {{ ansible_domain|upper }}
+ .{{ ansible_domain }} = {{ ansible_domain|upper }}
+ {{ ansible_domain }} = {{ ansible_domain|upper }}
 

@@ -81,7 +81,7 @@
 - name: Create Aquilon Virtual Env 
   become: yes
   ansible.builtin.shell:
-    cmd: virtualenv --prompt="(aquilon) " {{ aquilon_venv_path }} && . {{ aquilon_venv_path }}/bin/activate && pip install --upgrade pip && pip install --upgrade setuptools
+    cmd: virtualenv --prompt="(aquilon) " {{ aquilon_venv_path }} && source {{ aquilon_venv_path }}/bin/activate && pip install --upgrade pip && pip install --upgrade setuptools
     creates: "{{ aquilon_venv_path }}"
 
 - name: Install Python Modules for Aquilon using PIP
@@ -100,8 +100,10 @@
   register: r_clone_aquillon_prot
 
 - name: Build Aquilon Protocols
+  become: yes
   ansible.builtin.shell:
-    cmd: . {{ aquilon_venv_path }}/bin/activate && cd {{ aquilon_protocols_checkout_dir }} && ./setup.py install
+    cmd: source {{ aquilon_venv_path }}/bin/activate && ./setup.py install && ./setup.py install
+    chdir: "{{ aquilon_protocols_checkout_dir }}"
   when:
     - r_clone_aquillon_prot.changed == True
 
@@ -110,14 +112,13 @@
     repo: "{{ aquilon_git_repo }}"
     dest: "{{ aquilon_install_dir }}"
 
-# TODO. Create the aquillon directory structure in /var/quattor or equivalent
-
 - name: Render aqd.conf
   vars:
-    t_default_organization : "{{ default_org }}"
+    t_default_organization: "{{ default_org }}"
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
   ansible.builtin.template:
     src: aqd.conf.j2
-    dest: /etc/aqd.conf
+    dest: "{{ aquilon_aqd_conf_filepath }}"
 
 - name: Render krb5.conf
   ansible.builtin.template:
@@ -187,18 +188,33 @@
     cmd: kadmin.local -q "addprinc -pw {{ broker_user_fqdn_password }} {{ broker_user_fqdn }}"
   when: "'does not exist' in r_aquilon_brokerfqdn_princ.stderr"
 
-# TODO kinit fails to authenticate when we setup keytab. Something is not right... check with the documentation
+- name: Check if broker is already in keytab
+  ansible.builtin.shell:
+    cmd: klist -kt /var/spool/keytabs/aquilon | grep '{{ krb_principal }}@{{ ansible_domain|upper }}' | wc -l
+  register: r_keytab_broker
+  loop:
+    - "{{ broker_user }}"
+    - "{{ broker_user_fqdn }}"
+  loop_control:
+    loop_var: krb_principal
+    label: "{{ krb_principal }}"
 
-# - name: Create a keytab that will be readable by the broker account.
-#   ansible.builtin.command:
-#     cmd: kadmin.local -q "ktadd -k {{ kerberos_broker_keytab_filepath }} {{ broker_user }} {{ broker_user_fqdn }}"
+- name: Add broker account to keytab
+  ansible.builtin.command:
+    cmd: kadmin.local -q "ktadd -k {{ kerberos_broker_keytab_filepath }} {{ krb_principal_result.krb_principal }}"
+  when:
+    - krb_principal_result.stdout == "0"
+  loop: "{{ r_keytab_broker.results }}"
+  loop_control:
+    loop_var: krb_principal_result
+    label: "{{ krb_principal_result.krb_principal }}"
 
-# - name: Fix permissions to the keytab
-#   ansible.builtin.file:
-#     path: "{{ kerberos_broker_keytab_filepath }}"
-#     state: file
-#     owner: "{{ broker_user }}"
-#     group: "{{ broker_user }}"
+- name: Fix permissions to the keytab
+  ansible.builtin.file:
+    path: "{{ kerberos_broker_keytab_filepath }}"
+    state: file
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
 
 - name: Create aquilon directories
   ansible.builtin.file:
@@ -211,6 +227,11 @@
     loop_var: aquilon_dir
     label: "{{ aquilon_dir }}"
 
+- name: Activate the VirtualEnv, get kerberos ticket and initialize the database
+  ansible.builtin.shell:
+    cmd: source {{ aquilon_venv_path }}/bin/activate && kinit -kt {{ kerberos_broker_keytab_filepath }} {{ broker_user }} && /opt/aquilon/tests/aqdb/build_db.py
+    creates: "{{ aquilon_db_filepath }}"
+
 - name: Fix permissions in quattor root directory
   ansible.builtin.file:
     path: "{{ quattor_root_dir }}"
@@ -219,9 +240,50 @@
     owner: "{{ broker_user }}"
     group: "{{ broker_user }}"
 
+- name: Render aqd configuration file
+  vars:
+    t_aquilon_aqd_pidfile: "{{ aquilon_aqd_pidfile }}"
+    t_aquilon_aqd_twistd: "{{ aquilon_aqd_twistd }}"
+    t_aquilon_aqd_sysconfig_filepath: "{{ aquilon_aqd_conf_filepath }}"
+    t_aquilon_aqd_logfile: "{{ aquilon_aqd_logfile }}"
+    t_aquilon_aqd_lockfile: "{{ aquilon_aqd_lockfile }}"
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
+    t_broker_user: "{{ broker_user }}"
+  ansible.builtin.template:
+    src: aqd.j2
+    dest: "{{ aquilon_aqd_sysconfig_filepath }}"
 
+- name: Render aquilon-broker systemd unit
+  vars:
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
+    t_broker_user: "{{ broker_user }}"
+    t_aquilon_aqd_sysconfig_filepath: "{{ aquilon_aqd_sysconfig_filepath }}"
+  ansible.builtin.template:
+    src: aquilon-broker.service.j2
+    dest: "{{ aquilon_broker_service_filepath }}"
 
+- name: Start aquilon-broker service
+  ansible.builtin.systemd:
+    name: "{{ aquilon_broker_service }}"
+    daemon_reload: yes
+    enabled: yes
+    state: started
 
+- name: Create template-king repo
+  ansible.builtin.shell:
+    cmd: | 
+      git init --bare /var/quattor/template-king && 
+      cd /tmp && 
+      git clone /var/quattor/template-king &&
+      cd template-king &&
+      git checkout -b prod &&
+      echo "Aquilon templates master repository" > README.md &&
+      git add README.md &&
+      git commit -am 'README added' &&
+      git push --set-upstream origin HEAD &&
+      git push origin prod:trash
+    creates: /var/quattor/template-king
 
-
-    
+- name: Web Server Configuration - PENDING!!
+  debug:
+    msg: Web Server Configuration - PENDING!!

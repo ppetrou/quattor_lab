@@ -81,6 +81,8 @@ aquilon_protocols_checkout_dir: "/tmp/{{ aquilon_protocols_git_repo | basename }
 aquilon_git_repo: https://github.com/quattor/aquilon.git
 aquilon_install_dir: /opt/aquilon
 
+aquilon_aqd_conf_filepath: /etc/aqd.conf
+
 broker_user: aquilon
 broker_principal_password: broker123
 broker_user_fqdn: "{{ broker_user }}/{{ ansible_fqdn }}"
@@ -99,17 +101,28 @@ kerberos_services:
 kerberos_keytabs_dir: /var/spool/keytabs
 kerberos_broker_keytab_filepath: "{{ kerberos_keytabs_dir }}/{{ broker_user }}"
 
+aquilon_domains_dir: "{{ quattor_root_dir }}/domains"
+aquilon_db_dir: "{{ quattor_root_dir }}/aquilondb"
+aquilon_logs_dir: "{{ quattor_root_dir }}/logs"
+aquilon_run_dir: "{{ quattor_root_dir }}/run"
+
+aquilon_db_filepath: "{{ aquilon_db_dir }}/aquilon.db"
+
 aquilon_directories:
-  - "{{ quattor_root_dir }}/domains"
-  - "{{ quattor_root_dir }}/aquilondb"
+  - "{{ aquilon_domains_dir }}"
+  - "{{ aquilon_db_dir }}"
+  - "{{ aquilon_logs_dir }}"
+  - "{{ aquilon_run_dir }}"
 
+aquilon_aqd_sysconfig_filepath: /etc/sysconfig/aqd
+aquilon_broker_service: aquilon-broker.service
+aquilon_broker_service_filepath: /usr/lib/systemd/system/{{ aquilon_broker_service }}
 
+aquilon_aqd_pidfile: "{{ aquilon_run_dir }}/aqd.pid"
+aquilon_aqd_twistd: "{{ aquilon_install_dir }}/sbin/aqd.py"
+aquilon_aqd_logfile: "{{ aquilon_logs_dir }}/aqd.log"
+aquilon_aqd_lockfile: /var/lock/subsys/aqd
 
-  # - name: quattor_aquilon
-  #   baseur: http://yum.quattor.org/aquilon
-  #   enabled: 1
-  #   gpgcheck: 1
-  #   gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-quattor-jrha
 
   
 
