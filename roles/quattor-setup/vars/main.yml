@@ -105,6 +105,10 @@ aquilon_domains_dir: "{{ quattor_root_dir }}/domains"
 aquilon_db_dir: "{{ quattor_root_dir }}/aquilondb"
 aquilon_logs_dir: "{{ quattor_root_dir }}/logs"
 aquilon_run_dir: "{{ quattor_root_dir }}/run"
+aquilon_templates_dir: "{{ quattor_root_dir }}/templates"
+aquilon_web_htdocs_dir: "{{ quattor_root_dir }}/web/htdocs"
+aquilon_profiles_dir: "{{ aquilon_web_htdocs_dir }}/profiles"
+aquilon_template_king_dir: "{{ quattor_root_dir }}/template-king"
 
 aquilon_db_filepath: "{{ aquilon_db_dir }}/aquilon.db"
 
@@ -113,6 +117,7 @@ aquilon_directories:
   - "{{ aquilon_db_dir }}"
   - "{{ aquilon_logs_dir }}"
   - "{{ aquilon_run_dir }}"
+  - "{{ aquilon_templates_dir }}"
 
 aquilon_aqd_sysconfig_filepath: /etc/sysconfig/aqd
 aquilon_broker_service: aquilon-broker.service
@@ -123,13 +128,13 @@ aquilon_aqd_twistd: "{{ aquilon_install_dir }}/sbin/aqd.py"
 aquilon_aqd_logfile: "{{ aquilon_logs_dir }}/aqd.log"
 aquilon_aqd_lockfile: /var/lock/subsys/aqd
 
-
+aquilon_webserver_conf_filepath: /etc/httpd/conf/httpd.conf
+aquilon_webserver_service: httpd.service
+aquilon_profiles_url: http://{{ ansible_host }}/profiles
   
+aquilon_sudoersd_filepath: /etc/sudoers.d/aquilon
 
-
-
-
-
+aquilon_aii_installack_cgi_url: https://raw.githubusercontent.com/quattor/scdb/master/src/cgis/aii-installack.cgi
 
 
 

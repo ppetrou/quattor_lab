@@ -97,6 +97,7 @@
   ansible.builtin.git:
     repo: "{{ aquilon_protocols_git_repo }}"
     dest: "{{ aquilon_protocols_checkout_dir }}"
+    update: yes
   register: r_clone_aquillon_prot
 
 - name: Build Aquilon Protocols
@@ -284,6 +285,62 @@
       git push origin prod:trash
     creates: /var/quattor/template-king
 
-- name: Web Server Configuration - PENDING!!
+- name: Render httpd.conf with quattor profiles
+  vars:
+    t_aquilon_web_htdocs_dir: "{{ aquilon_web_htdocs_dir }}"
+  ansible.builtin.template:
+    src: httpd.conf.j2
+    dest: "{{ aquilon_webserver_conf_filepath }}"
+
+- name: Start and enable web server daemon
+  ansible.builtin.systemd:
+    name: "{{ aquilon_webserver_service }}"
+    enabled: yes
+    state: started
+
+- name: Verify aquilon profiles access
+  ansible.builtin.uri:
+    url: "{{ aquilon_profiles_url }}"
+    method: GET
+    status_code: 200
+
+- name: Render aquilon sudoer account - configure to run /usr/sbin/aii-shellfe with no password
+  vars:
+    t_broker_user: "{{ broker_user }}"
+  ansible.builtin.template:
+    src: aquilon_sudoer.j2
+    dest: "{{ aquilon_sudoersd_filepath }}"
+
+- name: Get aii_installack_cgi script and place in aquilon web directory
+  get_url:
+    url: "{{ aquilon_aii_installack_cgi_url }}"
+    dest: "{{ aquilon_profiles_dir }}"
+
+- name: Fix template-king Git repository SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_template_king_dir }}"
+    state: directory
+    recurse: yes
+    setype: git_sys_content_t
+
+- name: Fix rundir SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_run_dir }}"
+    state: directory
+    recurse: yes
+    setype: var_run_t
+
+- name: Fix profilesdir SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_profiles_dir }}"
+    state: directory
+    recurse: yes
+    setype: httpd_sys_content_t
+
+- name: Configure NFS-based Sandboxes - Not Implemented!! 
   debug:
-    msg: Web Server Configuration - PENDING!!
+    msg: Configure NFS-based Sandboxes - Not Implemented!! See https://www.quattor.org/aquilon/00-install.html#nfs-based-sandboxes for more information.
+
+- name: Aquilon Setup Completed :)
+  debug:
+    msg: Aquilon Setup Completed :)
