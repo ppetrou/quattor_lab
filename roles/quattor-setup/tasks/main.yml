@@ -343,4 +343,9 @@
 
 - name: Aquilon Setup Completed :)
   debug:
-    msg: Aquilon Setup Completed :)
+    msg: 
+      - Follow the steps below to ssh to the broker and get its status.
+      - 1. ssh root@{{ ansible_host }} (The password is root)
+      - 2. su - {{ broker_user }} 
+      - 3. kinit -kt {{ kerberos_broker_keytab_filepath }} {{ broker_user }}
+      - 4. {{ aquilon_install_dir }}/bin/aq.py status
