@@ -160,6 +160,7 @@
 - name: Create Broker User
   ansible.builtin.user:
     name: "{{ broker_user }}"
+    uid: 1010
     state: present
 
 - name: Create keytabs directory
@@ -233,14 +234,6 @@
     cmd: source {{ aquilon_venv_path }}/bin/activate && kinit -kt {{ kerberos_broker_keytab_filepath }} {{ broker_user }} && /opt/aquilon/tests/aqdb/build_db.py
     creates: "{{ aquilon_db_filepath }}"
 
-- name: Fix permissions in quattor root directory
-  ansible.builtin.file:
-    path: "{{ quattor_root_dir }}"
-    state: directory
-    recurse: yes
-    owner: "{{ broker_user }}"
-    group: "{{ broker_user }}"
-
 - name: Render aqd configuration file
   vars:
     t_aquilon_aqd_pidfile: "{{ aquilon_aqd_pidfile }}"
@@ -280,6 +273,8 @@
       git checkout -b prod &&
       echo "Aquilon templates master repository" > README.md &&
       git add README.md &&
+      git config user.name "Ansible User" &&
+      git config user.email "ansible@lab.local" &&
       git commit -am 'README added' &&
       git push --set-upstream origin HEAD &&
       git push origin prod:trash
@@ -337,9 +332,23 @@
     recurse: yes
     setype: httpd_sys_content_t
 
+- name: Fix permissions in quattor root directory
+  ansible.builtin.file:
+    path: "{{ quattor_root_dir }}"
+    state: directory
+    recurse: yes
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
 - name: Configure NFS-based Sandboxes - Not Implemented!! 
   debug:
     msg: Configure NFS-based Sandboxes - Not Implemented!! See https://www.quattor.org/aquilon/00-install.html#nfs-based-sandboxes for more information.
+
+- name: Create aq alias
+  ansible.builtin.lineinfile:
+    path: /home/{{ broker_user }}/.bash_profile
+    line: alias aq={{ aquilon_install_dir }}/bin/aq.py
+    state: present
 
 - name: Aquilon Setup Completed :)
   debug:
