@@ -1,0 +1,360 @@
+---
+# tasks file for broker_install
+
+- name: Update /etc/hosts
+  ansible.builtin.lineinfile:
+    path: "/etc/hosts"
+    line: "{{ ansible_host }}\t{{ ansible_fqdn }}"
+    state: present
+
+- name: Configure EPEL Release Repository
+  ansible.builtin.package:
+    name: epel-release
+    state: latest
+
+- name: Configure Quattor Repositories
+  ansible.builtin.yum_repository:
+    name: "{{ quattor_repo.name }}"
+    description: "{{ quattor_repo.description }}"
+    baseurl: "{{ quattor_repo.baseurl }}"
+    enabled: "{{ quattor_repo.enabled }}"
+    gpgcheck: "{{ quattor_repo.gpgcheck }}"
+    gpgkey: "{{ quattor_repo.gpgkey }}"
+  loop: "{{ quattor_repos }}"
+  loop_control:
+    loop_var: quattor_repo
+    label: "{{ quattor_repo.name }}}"
+
+- name: Download Quattor Repo GPG Key
+  ansible.builtin.get_url:
+    url: "{{ quattor_gpg_key_url }}"
+    dest: /etc/pki/rpm-gpg/
+    mode: '0644'
+
+- name: Import Quattor Repo GPG Key
+  ansible.builtin.rpm_key:
+    state: present
+    key: "{{ quattor_gpg_key_filepath }}"
+
+- name: Install Quattor
+  ansible.builtin.package:
+    name: "{{ quattor_pkg }}"
+    state: latest
+  loop: "{{ quattor_rpms }}"
+  loop_control:
+    loop_var: quattor_pkg
+    label: "{{ quattor_pkg }}"
+
+- name: Install Web Server
+  ansible.builtin.package:
+    name: "{{ webserver_rpm }}"
+    state: latest
+
+- name: Install Kerberos
+  ansible.builtin.package:
+    name: "{{ kerberos_server_rpm }}"
+    state: latest
+
+- name: Install Database
+  ansible.builtin.package:
+    name: "{{ db_pkg }}"
+    state: latest
+  loop: "{{ database_rpms }}"
+  loop_control:
+    loop_var: db_pkg
+    label: "{{ db_pkg }}"
+
+- name: Install Virtual Env Dependencies
+  ansible.builtin.package:
+    name: "{{ venv_dep_pkg }}"
+    state: latest
+  loop: "{{ virtual_env_dep_rpms }}"
+  loop_control:
+    loop_var: venv_dep_pkg
+    label: "{{ venv_dep_pkg }}"
+
+- name: Create Quattor Root Directory
+  ansible.builtin.file:
+    path: "{{ quattor_root_dir }}"
+    state: directory
+
+- name: Create Aquilon Virtual Env 
+  become: yes
+  ansible.builtin.shell:
+    cmd: virtualenv --prompt="(aquilon) " {{ aquilon_venv_path }} && source {{ aquilon_venv_path }}/bin/activate && pip install --upgrade pip && pip install --upgrade setuptools
+    creates: "{{ aquilon_venv_path }}"
+
+- name: Install Python Modules for Aquilon using PIP
+  ansible.builtin.pip:
+    name: "{{ aq_pip_module }}"
+    virtualenv: "{{ aquilon_venv_path }}"
+  loop: "{{ aquilon_pip_modules }}"
+  loop_control:
+    loop_var: aq_pip_module
+    label: "{{ aq_pip_module }}"
+
+- name: Clone Aquilon Protocols
+  ansible.builtin.git:
+    repo: "{{ aquilon_protocols_git_repo }}"
+    dest: "{{ aquilon_protocols_checkout_dir }}"
+    update: yes
+  register: r_clone_aquillon_prot
+
+- name: Build Aquilon Protocols
+  become: yes
+  ansible.builtin.shell:
+    cmd: source {{ aquilon_venv_path }}/bin/activate && ./setup.py install && ./setup.py install
+    chdir: "{{ aquilon_protocols_checkout_dir }}"
+  when:
+    - r_clone_aquillon_prot.changed == True
+
+- name: Install Aquilon
+  ansible.builtin.git:
+    repo: "{{ aquilon_git_repo }}"
+    dest: "{{ aquilon_install_dir }}"
+
+- name: Render aqd.conf
+  vars:
+    t_default_organization: "{{ default_org }}"
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
+  ansible.builtin.template:
+    src: aqd.conf.j2
+    dest: "{{ aquilon_aqd_conf_filepath }}"
+
+- name: Render krb5.conf
+  ansible.builtin.template:
+    src: krb5.conf.j2
+    dest: /etc/krb5.conf
+
+- name: Initialize and create the Kerberos database
+  ansible.builtin.command:
+    cmd: kdb5_util create -s -P {{ kerberos_database_master_password }}
+    creates: "{{ kerberos_database_filepath }}"
+
+- name: Grant administrative access to admin accounts
+  ansible.builtin.lineinfile:
+    path: "{{ kerberos_acl_filepath }}"
+    line: "{{ kerberos_admin_acl_entry }}"
+    state: present
+
+- name: Get kerberos admin account
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc admin/admin"
+  register: r_get_krb_admin_princ
+
+- name: Create kerberos admin principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ kerberos_admin_account_password }} admin/admin"
+  when: "'does not exist' in r_get_krb_admin_princ.stderr"
+
+- name: Enable and Start Kerberos Services
+  ansible.builtin.systemd:
+    name: "{{ krb_service }}"
+    state: started
+    enabled: yes
+  loop: "{{ kerberos_services }}"
+  loop_control:
+    loop_var: krb_service
+    label: "{{ krb_service }}"
+
+- name: Create Broker User
+  ansible.builtin.user:
+    name: "{{ broker_user }}"
+    uid: 1010
+    state: present
+
+- name: Create keytabs directory
+  ansible.builtin.file:
+    path: "{{ kerberos_keytabs_dir }}"
+    state: directory
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
+- name: Get kerberos broker principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc {{ broker_user }}"
+  register: r_aquilon_broker_princ
+
+- name: Create kerberos broker principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ broker_principal_password }} {{ broker_user }}"
+  when: "'does not exist' in r_aquilon_broker_princ.stderr"
+
+- name: Get kerberos broker/host.fqdn principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "getprinc {{ broker_user_fqdn }}"
+  register: r_aquilon_brokerfqdn_princ
+
+- name: Create kerberos broker/fqdn principal
+  ansible.builtin.command:
+    cmd: kadmin.local -q "addprinc -pw {{ broker_user_fqdn_password }} {{ broker_user_fqdn }}"
+  when: "'does not exist' in r_aquilon_brokerfqdn_princ.stderr"
+
+- name: Check if broker is already in keytab
+  ansible.builtin.shell:
+    cmd: klist -kt /var/spool/keytabs/aquilon | grep '{{ krb_principal }}@{{ ansible_domain|upper }}' | wc -l
+  register: r_keytab_broker
+  loop:
+    - "{{ broker_user }}"
+    - "{{ broker_user_fqdn }}"
+  loop_control:
+    loop_var: krb_principal
+    label: "{{ krb_principal }}"
+
+- name: Add broker account to keytab
+  ansible.builtin.command:
+    cmd: kadmin.local -q "ktadd -k {{ kerberos_broker_keytab_filepath }} {{ krb_principal_result.krb_principal }}"
+  when:
+    - krb_principal_result.stdout == "0"
+  loop: "{{ r_keytab_broker.results }}"
+  loop_control:
+    loop_var: krb_principal_result
+    label: "{{ krb_principal_result.krb_principal }}"
+
+- name: Fix permissions to the keytab
+  ansible.builtin.file:
+    path: "{{ kerberos_broker_keytab_filepath }}"
+    state: file
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
+- name: Create aquilon directories
+  ansible.builtin.file:
+    path: "{{ aquilon_dir }}"
+    state: directory
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+  loop: "{{ aquilon_directories }}"
+  loop_control:
+    loop_var: aquilon_dir
+    label: "{{ aquilon_dir }}"
+
+- name: Activate the VirtualEnv, get kerberos ticket and initialize the database
+  ansible.builtin.shell:
+    cmd: source {{ aquilon_venv_path }}/bin/activate && kinit -kt {{ kerberos_broker_keytab_filepath }} {{ broker_user }} && /opt/aquilon/tests/aqdb/build_db.py
+    creates: "{{ aquilon_db_filepath }}"
+
+- name: Render aqd configuration file
+  vars:
+    t_aquilon_aqd_pidfile: "{{ aquilon_aqd_pidfile }}"
+    t_aquilon_aqd_twistd: "{{ aquilon_aqd_twistd }}"
+    t_aquilon_aqd_sysconfig_filepath: "{{ aquilon_aqd_conf_filepath }}"
+    t_aquilon_aqd_logfile: "{{ aquilon_aqd_logfile }}"
+    t_aquilon_aqd_lockfile: "{{ aquilon_aqd_lockfile }}"
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
+    t_broker_user: "{{ broker_user }}"
+  ansible.builtin.template:
+    src: aqd.j2
+    dest: "{{ aquilon_aqd_sysconfig_filepath }}"
+
+- name: Render aquilon-broker systemd unit
+  vars:
+    t_aquilon_venv_path: "{{ aquilon_venv_path }}"
+    t_broker_user: "{{ broker_user }}"
+    t_aquilon_aqd_sysconfig_filepath: "{{ aquilon_aqd_sysconfig_filepath }}"
+  ansible.builtin.template:
+    src: aquilon-broker.service.j2
+    dest: "{{ aquilon_broker_service_filepath }}"
+
+- name: Start aquilon-broker service
+  ansible.builtin.systemd:
+    name: "{{ aquilon_broker_service }}"
+    daemon_reload: yes
+    enabled: yes
+    state: started
+
+- name: Create template-king repo
+  ansible.builtin.shell:
+    cmd: | 
+      git init --bare /var/quattor/template-king && 
+      cd /tmp && 
+      git clone /var/quattor/template-king &&
+      cd template-king &&
+      git checkout -b prod &&
+      echo "Aquilon templates master repository" > README.md &&
+      git add README.md &&
+      git config user.name "Ansible User" &&
+      git config user.email "ansible@lab.local" &&
+      git commit -am 'README added' &&
+      git push --set-upstream origin HEAD &&
+      git push origin prod:trash
+    creates: /var/quattor/template-king
+
+- name: Render httpd.conf with quattor profiles
+  vars:
+    t_aquilon_web_htdocs_dir: "{{ aquilon_web_htdocs_dir }}"
+  ansible.builtin.template:
+    src: httpd.conf.j2
+    dest: "{{ aquilon_webserver_conf_filepath }}"
+
+- name: Start and enable web server daemon
+  ansible.builtin.systemd:
+    name: "{{ aquilon_webserver_service }}"
+    enabled: yes
+    state: started
+
+- name: Verify aquilon profiles access
+  ansible.builtin.uri:
+    url: "{{ aquilon_profiles_url }}"
+    method: GET
+    status_code: 200
+
+- name: Render aquilon sudoer account - configure to run /usr/sbin/aii-shellfe with no password
+  vars:
+    t_broker_user: "{{ broker_user }}"
+  ansible.builtin.template:
+    src: aquilon_sudoer.j2
+    dest: "{{ aquilon_sudoersd_filepath }}"
+
+- name: Get aii_installack_cgi script and place in aquilon web directory
+  get_url:
+    url: "{{ aquilon_aii_installack_cgi_url }}"
+    dest: "{{ aquilon_profiles_dir }}"
+
+- name: Fix template-king Git repository SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_template_king_dir }}"
+    state: directory
+    recurse: yes
+    setype: git_sys_content_t
+
+- name: Fix rundir SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_run_dir }}"
+    state: directory
+    recurse: yes
+    setype: var_run_t
+
+- name: Fix profilesdir SELINUX Permissions
+  ansible.builtin.file:
+    path: "{{ aquilon_profiles_dir }}"
+    state: directory
+    recurse: yes
+    setype: httpd_sys_content_t
+
+- name: Fix permissions in quattor root directory
+  ansible.builtin.file:
+    path: "{{ quattor_root_dir }}"
+    state: directory
+    recurse: yes
+    owner: "{{ broker_user }}"
+    group: "{{ broker_user }}"
+
+- name: Configure NFS-based Sandboxes - Not Implemented!! 
+  debug:
+    msg: Configure NFS-based Sandboxes - Not Implemented!! See https://www.quattor.org/aquilon/00-install.html#nfs-based-sandboxes for more information.
+
+- name: Create aq alias
+  ansible.builtin.lineinfile:
+    path: /home/{{ broker_user }}/.bash_profile
+    line: alias aq={{ aquilon_install_dir }}/bin/aq.py
+    state: present
+
+- name: Aquilon Setup Completed :)
+  debug:
+    msg: 
+      - Follow the steps below to ssh to the broker and get its status.
+      - 1. ssh root@{{ ansible_host }} (The password is root)
+      - 2. su - {{ broker_user }} 
+      - 3. kinit -kt {{ kerberos_broker_keytab_filepath }} {{ broker_user }}
+      - 4. {{ aquilon_install_dir }}/bin/aq.py status

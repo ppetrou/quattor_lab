@@ -1,0 +1,140 @@
+---
+# vars file for broker_install
+
+quattor_gpg_key_url: http://yum.quattor.org/GPG/RPM-GPG-KEY-quattor-jrha
+quattor_gpg_key_filepath: /etc/pki/rpm-gpg/RPM-GPG-KEY-quattor-jrha
+
+quattor_repos:
+  - name: quattor
+    description: Quattor Repository
+    baseurl: http://yum.quattor.org/{{ quattor_ver }}/el$releasever
+    enabled: yes
+    gpgcheck: yes
+    gpgkey: file://{{ quattor_gpg_key_filepath }}
+  - name: quattor_externals_arch
+    description: Quattor Externals Arch
+    baseurl: http://yum.quattor.org/externals/$basearch/el$releasever
+    enabled: yes
+    gpgcheck: no
+    gpgkey: file://{{ quattor_gpg_key_filepath }}
+  - name: quattor_externals_noarch
+    description: Quattor Externals Noarch
+    baseurl: http://yum.quattor.org/externals/noarch/el$releasever
+    enabled: yes
+    gpgcheck: no
+    gpgkey: file://{{ quattor_gpg_key_filepath }}
+
+quattor_rpms:
+  - ant-apache-regexp 
+  - ant-contrib
+  - gcc
+  - git
+  - git-daemon
+  - java-1.8.0-openjdk-devel
+  - libxslt
+  - libxml2
+  - make
+  - panc
+  - knc
+  - krb5-workstation
+  - protobuf-compiler
+  - protobuf-devel
+  - python-devel
+  - python-setuptools
+  - aii-server
+
+webserver_rpm : httpd
+
+kerberos_server_rpm: krb5-server
+
+database_rpms: 
+  - sqlite
+
+virtual_env_dep_rpms:
+  - postgresql-devel
+  - libxslt-devel
+  - libyaml-devel
+  - python-virtualenv
+
+quattor_root_dir: /var/quattor
+aquilon_venv_path: "{{ quattor_root_dir }}/aquilon-venv"
+
+aquilon_pip_modules:
+  - coverage
+  - functools32
+  - ipaddress
+  - lxml
+  - mako
+  - jsonschema
+  - psycopg2
+  - protobuf
+  - python-cdb
+  - python-dateutil
+  - pyyaml
+  - sqlalchemy==1.3.24 # Anything later than version 1.3.24 will raise the following error. "from sqlalchemy.util import KeyedTuple exceptions.ImportError: cannot import name KeyedTuple".
+  - twisted
+  - virtualenv
+
+aquilon_protocols_git_repo: https://github.com/quattor/aquilon-protocols.git
+aquilon_protocols_checkout_dir: "/tmp/{{ aquilon_protocols_git_repo | basename }}"
+
+aquilon_git_repo: https://github.com/quattor/aquilon.git
+aquilon_install_dir: /opt/aquilon
+
+aquilon_aqd_conf_filepath: /etc/aqd.conf
+
+broker_user: aquilon
+broker_principal_password: broker123
+broker_user_fqdn: "{{ broker_user }}/{{ ansible_fqdn }}"
+broker_user_fqdn_password: brokerfqdn123
+
+kerberos_database_filepath : /var/kerberos/krb5kdc/principal
+kerberos_acl_filepath: /var/kerberos/krb5kdc/kadm5.acl
+kerberos_database_master_password: kerberos123
+kerberos_admin_acl_entry: "*/admin@{{ ansible_domain }}  *"
+kerberos_admin_account_password: welcome123
+
+kerberos_services:
+  - krb5kdc
+  - kadmin
+
+kerberos_keytabs_dir: /var/spool/keytabs
+kerberos_broker_keytab_filepath: "{{ kerberos_keytabs_dir }}/{{ broker_user }}"
+
+aquilon_domains_dir: "{{ quattor_root_dir }}/domains"
+aquilon_db_dir: "{{ quattor_root_dir }}/aquilondb"
+aquilon_logs_dir: "{{ quattor_root_dir }}/logs"
+aquilon_run_dir: "{{ quattor_root_dir }}/run"
+aquilon_templates_dir: "{{ quattor_root_dir }}/templates"
+aquilon_web_htdocs_dir: "{{ quattor_root_dir }}/web/htdocs"
+aquilon_profiles_dir: "{{ aquilon_web_htdocs_dir }}/profiles"
+aquilon_template_king_dir: "{{ quattor_root_dir }}/template-king"
+
+aquilon_db_filepath: "{{ aquilon_db_dir }}/aquilon.db"
+
+aquilon_directories:
+  - "{{ aquilon_domains_dir }}"
+  - "{{ aquilon_db_dir }}"
+  - "{{ aquilon_logs_dir }}"
+  - "{{ aquilon_run_dir }}"
+  - "{{ aquilon_templates_dir }}"
+
+aquilon_aqd_sysconfig_filepath: /etc/sysconfig/aqd
+aquilon_broker_service: aquilon-broker.service
+aquilon_broker_service_filepath: /usr/lib/systemd/system/{{ aquilon_broker_service }}
+
+aquilon_aqd_pidfile: "{{ aquilon_run_dir }}/aqd.pid"
+aquilon_aqd_twistd: "{{ aquilon_install_dir }}/sbin/aqd.py"
+aquilon_aqd_logfile: "{{ aquilon_logs_dir }}/aqd.log"
+aquilon_aqd_lockfile: /var/lock/subsys/aqd
+
+aquilon_webserver_conf_filepath: /etc/httpd/conf/httpd.conf
+aquilon_webserver_service: httpd.service
+aquilon_profiles_url: http://{{ ansible_host }}/profiles
+  
+aquilon_sudoersd_filepath: /etc/sudoers.d/aquilon
+
+aquilon_aii_installack_cgi_url: https://raw.githubusercontent.com/quattor/scdb/master/src/cgis/aii-installack.cgi
+
+
+
