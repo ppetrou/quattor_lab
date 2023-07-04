@@ -12,7 +12,7 @@ ansible-galaxy collection install git@github.com:ppetrou/quattor_lab.git#collect
 
 |Type|Name|Description
 |---|---|---
-|Role|broker_install|Broker Installation and basic configuration.
+|Role|[broker_install](roles/broker_install/README.md) |Broker Installation and basic configuration.
 
 
 # Release Notes
