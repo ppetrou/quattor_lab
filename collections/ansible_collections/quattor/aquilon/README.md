@@ -1,3 +1,25 @@
 # Ansible Collection - quattor.aquilon
 
-Documentation for the collection.
+Ansible Collection to install, configure and manage Quattor.
+
+# Installation
+
+```
+ansible-galaxy collection install git@github.com:ppetrou/quattor_lab.git#collections/ansible_collections/quattor/aquilon/
+```
+
+# Content
+
+|Type|Name|Description
+|---|---|---
+|Role|broker_install|Broker Installation and basic configuration.
+
+
+# Release Notes
+
+To be defined.
+
+# Licence
+
+Apache 2.0
+
