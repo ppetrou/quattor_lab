@@ -45,7 +45,9 @@ Apache 2.0
 Author Information
 ------------------
 
+```
 Petros Petrou
 www.petrospetrou.co.uk
 ppetrou@gmail.com
+```
 
