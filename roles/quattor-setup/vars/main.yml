@@ -118,6 +118,8 @@ aquilon_directories:
   - "{{ aquilon_logs_dir }}"
   - "{{ aquilon_run_dir }}"
   - "{{ aquilon_templates_dir }}"
+  - "{{ aquilon_web_htdocs_dir }}"
+  - "{{ aquilon_profiles_dir }}"
 
 aquilon_aqd_sysconfig_filepath: /etc/sysconfig/aqd
 aquilon_broker_service: aquilon-broker.service
